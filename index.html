@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plán týdne</title>
+<style>
+:root {
+  --primary: #6366f1; --primary-light: #e0e7ff; --done-color: #10b981;
+  --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #1e293b; --muted: #94a3b8;
+  --today-bg: #fef3c7; --today-border: #f59e0b;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08); --shadow-lg: 0 4px 16px rgba(0,0,0,0.10);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; align-items: center; height: 54px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); gap: 10px; }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.app-title { font-size: 16px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.week-nav { display: flex; align-items: center; gap: 5px; }
+.week-label { font-size: 13px; font-weight: 600; min-width: 155px; text-align: center; }
+.nav-btn { background: none; border: 1px solid var(--border); border-radius: 7px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; color: var(--text); display: flex; align-items: center; justify-content: center; }
+.nav-btn:hover { background: var(--bg); }
+.today-btn { background: var(--primary); color: white; border: none; border-radius: 7px; padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+.sync-strip { background: #f8fafc; border-bottom: 1px solid var(--border); padding: 4px 16px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; flex-shrink: 0; }
+.sync-dot.ok { background: #10b981; } .sync-dot.warn { background: #f59e0b; }
+.sync-text { flex: 1; }
+.sync-link { color: var(--primary); cursor: pointer; text-decoration: underline; white-space: nowrap; }
+
+.stats-bar { background: var(--primary-light); padding: 5px 16px; display: flex; gap: 14px; font-size: 11px; color: var(--primary); font-weight: 500; flex-wrap: wrap; }
+
+main { padding: 14px 10px; overflow-x: auto; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(145px, 1fr)); gap: 9px; min-width: 840px; }
+
+.day-col { background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; box-shadow: var(--shadow); min-height: 340px; }
+.day-col.is-today { border-color: var(--today-border); background: var(--today-bg); box-shadow: 0 0 0 2px #f59e0b33, var(--shadow); }
+.day-col.drag-over { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light), var(--shadow-lg); }
+.day-header { padding: 9px 11px 7px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.is-today .day-header { border-bottom-color: #fde68a; }
+.day-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.is-today .day-name { color: var(--today-border); }
+.day-date { font-size: 19px; font-weight: 800; color: var(--text); line-height: 1; margin-top: 1px; }
+.is-today .day-date { color: var(--today-border); }
+.day-count { font-size: 10px; background: var(--primary-light); color: var(--primary); border-radius: 10px; padding: 2px 6px; font-weight: 600; }
+.is-today .day-count { background: #fde68a; color: #92400e; }
+
+.task-list { flex: 1; padding: 5px; display: flex; flex-direction: column; gap: 0; min-height: 40px; }
+.task-item { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 6px; cursor: grab; transition: box-shadow 0.15s; position: relative; }
+.task-item:hover { box-shadow: var(--shadow-lg); }
+.task-item.dragging { opacity: 0.35; cursor: grabbing; }
+.task-item.person-radek { background: #f5f3ff; border-color: #a78bfa; border-left: 3px solid #7c3aed; }
+.task-item.person-radek .task-text { color: #4c1d95; font-weight: 700; }
+.task-item.tag-iso { background: #f1f5f9; border-color: #94a3b8; border-left: 3px solid #475569; }
+.task-item.tag-iso .task-text { color: #1e293b; font-weight: 700; }
+.task-item.done .task-text { text-decoration: line-through; color: var(--muted); font-weight: 400 !important; }
+.task-item.rolled-over { border-left: 3px solid #f97316; background: #fff7ed; }
+.task-item.rolled-over .task-text { color: #9a3412; }
+.task-item.has-priority-high { background: #fff5f5; border-color: #fca5a5; border-left: 3px solid #dc2626; }
+.task-item.has-priority-high .task-text { font-weight: 700; color: #7f1d1d; }
+.task-item.has-priority-medium { background: #fffbeb; border-color: #fcd34d; border-left: 3px solid #d97706; }
+.task-item.has-priority-medium .task-text { font-weight: 700; color: #78350f; }
+.task-item.has-priority-low { background: #f0fdf4; border-color: #86efac; border-left: 3px solid #16a34a; }
+.task-item.has-priority-low .task-text { font-weight: 700; color: #14532d; }
+.task-item.has-priority-pink { background: #fdf2f8; border-color: #f9a8d4; border-left: 3px solid #ec4899; }
+.task-item.has-priority-pink .task-text { font-weight: 700; color: #831843; }
+/* Ukazatel pozice při přetahování */
+.drop-indicator { height: 2px; background: var(--primary); border-radius: 2px; margin: 0 4px 4px; display: none; }
+.drop-indicator.visible { display: block; }
+
+.task-check { width: 14px; height: 14px; min-width: 14px; border: 2px solid var(--border); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 2px; background: white; font-size: 8px; transition: all 0.15s; flex-shrink: 0; }
+.task-check:hover { border-color: var(--done-color); }
+.task-item.done .task-check { background: var(--done-color); border-color: var(--done-color); color: white; }
+.task-body { flex: 1; min-width: 0; }
+.task-text { font-size: 12px; line-height: 1.4; word-break: break-word; }
+.task-actions { display: none; gap: 2px; flex-shrink: 0; }
+.task-item:hover .task-actions { display: flex; }
+.task-action-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 1px 3px; border-radius: 3px; line-height: 1; }
+.task-action-btn:hover { color: var(--primary); background: var(--primary-light); }
+.task-del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 1px 3px; border-radius: 3px; }
+.task-del-btn:hover { color: #ef4444; background: #fee2e2; }
+
+/* Inline edit */
+.task-edit-input { width: 100%; border: 1px solid var(--primary); border-radius: 5px; padding: 2px 5px; font-size: 12px; font-family: inherit; outline: none; resize: none; }
+
+/* Copy popup */
+.copy-popup { position: absolute; right: 0; top: 100%; background: white; border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 10px; z-index: 50; min-width: 200px; }
+.copy-popup h4 { font-size: 11px; color: var(--muted); margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.4px; }
+.copy-days { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.copy-day-btn { border: 1px solid var(--border); background: var(--bg); border-radius: 5px; padding: 3px 7px; font-size: 11px; cursor: pointer; }
+.copy-day-btn.selected { background: var(--primary); color: white; border-color: var(--primary); }
+.copy-confirm { width: 100%; background: var(--primary); color: white; border: none; border-radius: 6px; padding: 5px; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+.add-task-area { padding: 5px; border-top: 1px solid var(--border); }
+.is-today .add-task-area { border-top-color: #fde68a; }
+.add-task-form { display: none; flex-direction: column; gap: 5px; }
+.add-task-form.visible { display: flex; }
+.add-task-input { width: 100%; border: 1px solid var(--primary); border-radius: 7px; padding: 5px 8px; font-size: 12px; outline: none; resize: none; font-family: inherit; }
+.add-task-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.priority-select { border: 1px solid var(--border); border-radius: 5px; padding: 3px 4px; font-size: 10px; outline: none; background: white; flex: 1; }
+.add-confirm-btn { background: var(--primary); color: white; border: none; border-radius: 5px; padding: 4px 9px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.add-cancel-btn { background: none; border: 1px solid var(--border); border-radius: 5px; padding: 4px 7px; font-size: 11px; cursor: pointer; color: var(--muted); }
+.add-task-btn { width: 100%; background: none; border: 1px dashed var(--border); border-radius: 7px; padding: 5px; font-size: 11px; color: var(--muted); cursor: pointer; font-family: inherit; }
+.add-task-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.empty-hint { color: var(--muted); font-size: 10px; text-align: center; padding: 8px; font-style: italic; }
+
+/* Spodní panely */
+.bottom-panels { display: flex; gap: 10px; margin: 14px 10px 0; flex-wrap: nowrap; align-items: flex-start; overflow-x: auto; }
+.backlog-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: visible; flex: 1 1 0; min-width: 160px; }
+@media (max-width: 900px) { .bottom-panels { flex-wrap: wrap; } .backlog-section { flex: 0 0 100%; } }
+.backlog-header { padding: 9px 13px; background: #f1f5f9; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; border-radius: 12px 12px 0 0; }
+.backlog-header h3 { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+.backlog-toggle { font-size: 11px; color: var(--muted); }
+.backlog-body { padding: 7px; display: flex; flex-direction: column; gap: 5px; min-height: 44px; }
+.backlog-body.collapsed { display: none; }
+.backlog-body.drag-over { background: var(--primary-light); border-radius: 0 0 12px 12px; }
+.backlog-task { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: grab; display: flex; align-items: center; gap: 6px; width: 100%; }
+.backlog-task:hover { box-shadow: var(--shadow-lg); }
+.backlog-task:hover .task-actions { display: flex; }
+.backlog-task.dragging { opacity: 0.35; }
+.backlog-task.done .backlog-task-text { text-decoration: line-through; color: var(--muted); font-weight: 400 !important; }
+.backlog-task.priority-high { background: #fff5f5; border-color: #fca5a5; border-left: 3px solid #dc2626; font-weight: 700; }
+.backlog-task.priority-medium { background: #fffbeb; border-color: #fcd34d; border-left: 3px solid #d97706; font-weight: 700; }
+.backlog-task.priority-low { background: #f0fdf4; border-color: #86efac; border-left: 3px solid #16a34a; font-weight: 700; }
+.backlog-task.priority-pink { background: #fdf2f8; border-color: #f9a8d4; border-left: 3px solid #ec4899; font-weight: 700; }
+.backlog-task.person-radek { background: #f5f3ff; border-color: #a78bfa; border-left: 3px solid #7c3aed; font-weight: 700; color: #4c1d95; }
+.task-item.tag-kaja { background: #fffcf8; border-color: #fed7aa; border-left: 3px solid #fdba74; }
+.task-item.tag-kaja .task-text { color: #9a5d2a; }
+.backlog-task.tag-iso { background: #f1f5f9; border-color: #94a3b8; border-left: 3px solid #475569; font-weight: 700; color: #1e293b; }
+.backlog-task.tag-kaja { background: #fffcf8; border-color: #fed7aa; border-left: 3px solid #fdba74; color: #9a5d2a; }
+.backlog-task.rolled-over { border-left: 3px solid #f97316; background: #fff7ed; }
+.backlog-task.rolled-over .backlog-task-text { color: #9a3412; }
+.backlog-task.done .backlog-check { background: var(--done-color); border-color: var(--done-color); color: white; }
+.backlog-drop-indicator { height: 2px; background: var(--primary); border-radius: 2px; margin: 0 4px 2px; display: none; }
+.backlog-drop-indicator.visible { display: block; }
+.done-toggle { font-size: 11px; color: var(--muted); cursor: pointer; padding: 4px 8px; border-top: 1px solid var(--border); margin-top: 4px; user-select: none; }
+.done-toggle:hover { color: var(--primary); }
+.backlog-check { width: 14px; height: 14px; min-width: 14px; border: 2px solid var(--border); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; background: white; font-size: 8px; flex-shrink: 0; }
+.backlog-check:hover { border-color: var(--done-color); }
+.backlog-task-text { flex: 1; }
+.backlog-add { display: flex; gap: 6px; padding: 0 7px 7px; }
+.backlog-input { flex: 1; border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; font-size: 12px; outline: none; font-family: inherit; }
+.backlog-input:focus { border-color: var(--primary); }
+.backlog-add-btn { background: var(--primary); color: white; border: none; border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+
+
+/* JSONBin setup modal */
+.jb-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 500; display: flex; align-items: center; justify-content: center; }
+.jb-box { background: white; border-radius: 14px; padding: 22px; max-width: 350px; width: 92%; box-shadow: var(--shadow-lg); }
+.jb-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.jb-box p { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
+.jb-input { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; outline: none; font-family: inherit; }
+.jb-input:focus { border-color: var(--primary); }
+.jb-btn-row { display: flex; gap: 8px; margin-top: 6px; }
+.jb-btn { flex: 1; padding: 8px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.jb-btn-primary { background: var(--primary); color: white; border: none; }
+.jb-btn-secondary { background: white; border: 1px solid var(--border); color: var(--text); }
+.jb-status { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; min-height: 16px; line-height: 1.5; }
+.jb-bin-result { background: #f0fdf4; border: 1px solid #86efac; border-radius: 7px; padding: 8px 10px; font-size: 11px; margin-top: 8px; color: #14532d; word-break: break-all; }
+
+/* Timeline pruh */
+.tl-wrap { overflow-x: auto; padding: 4px 10px 0; }
+.tl-grid { display: grid; grid-template-columns: repeat(7, minmax(145px, 1fr)); gap: 9px; min-width: 840px; }
+.tl-span { height: 28px; margin-bottom: 3px; border-radius: 5px; display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #1e293b; overflow: hidden; white-space: nowrap; user-select: none; }
+.tl-span:hover .tl-del { opacity: 1; }
+.tl-span-text { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; padding: 0 4px; cursor: text; }
+.tl-del { opacity: 0; background: rgba(0,0,0,.25); border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 10px; padding: 1px 5px; flex-shrink: 0; transition: opacity .15s; margin-right: 3px; }
+.tl-span-input { flex: 1; background: rgba(255,255,255,.25); border: none; outline: none; color: white; font-size: 11px; font-weight: 600; font-family: inherit; min-width: 0; padding: 0 4px; }
+.tl-span-input::placeholder { color: rgba(255,255,255,.65); }
+.tl-resize { width: 10px; flex-shrink: 0; height: 100%; cursor: col-resize; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; font-size: 9px; }
+.tl-span:hover .tl-resize { opacity: .7; }
+.tl-add-btn { display: block; margin: 3px 10px 2px; background: none; border: 1.5px dashed #e2e8f0; border-radius: 6px; padding: 3px 12px; font-size: 11px; color: #94a3b8; cursor: pointer; font-family: inherit; }
+.tl-add-btn:hover { border-color: #881337; color: #881337; background: #fff1f2; }
+.tl-color-dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.55); flex-shrink: 0; cursor: pointer; margin-left: 3px; transition: transform .12s; }
+.tl-color-dot:hover { transform: scale(1.25); }
+.tl-color-picker { position: fixed; background: white; border: 1px solid #e2e8f0; border-radius: 9px; padding: 7px 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 156px; z-index: 400; box-shadow: 0 6px 18px rgba(0,0,0,.15); }
+.tl-color-swatch { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2.5px solid transparent; transition: transform .1s; }
+.tl-color-swatch:hover { transform: scale(1.2); border-color: #94a3b8; }
+.tl-color-swatch.active { border-color: white; outline: 2px solid #475569; }
+
+/* Toast */
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
+
+footer { text-align: center; padding: 12px; font-size: 10px; color: var(--muted); margin-top: 14px; }
+
+.mobile-save-bar { display: none; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 200; }
+.mobile-save-btn { background: #7c3aed; color: white; border: none; border-radius: 24px; padding: 12px 28px; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(124,58,237,0.4); white-space: nowrap; }
+.mobile-save-btn.saved { background: #10b981; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <span class="app-title">📅 Plán týdne</span>
+    <div class="week-nav">
+      <button class="nav-btn" onclick="changeWeek(-1)">‹</button>
+      <span class="week-label" id="weekLabel"></span>
+      <button class="nav-btn" onclick="changeWeek(1)">›</button>
+    </div>
+    <button class="today-btn" onclick="goToCurrentWeek()">Dnes</button>
+  </div>
+</header>
+<div class="sync-strip">
+  <div class="sync-dot" id="syncDot"></div>
+  <span class="sync-text" id="syncText">Ukládám automaticky v prohlížeči</span>
+  <span class="sync-link" id="syncLink" onclick="setupSync()">☁️ Nastavit sync s OneDrivem</span>
+  <span class="sync-link" id="jbLink" style="margin-left:8px" onclick="openGhSetup()">☁️ GitHub Gist</span>
+</div>
+<div id="fsaReconnectBar" style="display:none; background:#fff7ed; border-bottom:2px solid #f59e0b; padding:10px 16px; align-items:center; gap:12px; font-size:13px; color:#92400e;">
+  <span>📁 <strong>OneDrive sync</strong> — aplikace potřebuje každý start obnovit přístup ke složce</span>
+  <button onclick="fsaReconnect()" style="background:#f59e0b; color:#fff; border:none; border-radius:6px; padding:6px 18px; font-weight:700; cursor:pointer; font-size:13px; margin-left:auto; white-space:nowrap;">🔄 Obnovit přístup</button>
+</div>
+<div class="stats-bar" id="statsBar"></div>
+<div class="tl-wrap" id="tlWrap">
+  <div class="tl-grid" id="tlGrid"></div>
+  <button class="tl-add-btn" onclick="tlAddSpan()">+ Přidat pruh</button>
+</div>
+<main><div class="week-grid" id="weekGrid"></div></main>
+<div class="bottom-panels">
+  <div class="backlog-section" id="backlogSection">
+    <div class="backlog-header" onclick="toggleBacklog()">
+      <h3>📥 Inbox / Bez data</h3>
+      <span class="backlog-toggle" id="backlogToggle">▼ skrýt</span>
+    </div>
+    <div class="backlog-body" id="backlogBody"></div>
+    <div class="backlog-add">
+      <input class="backlog-input" id="backlogInput" placeholder="Přidat úkol bez data..." onkeydown="if(event.key==='Enter') addBacklogTask()">
+      <select class="priority-select" id="backlogPri" style="max-width:90px">
+        <option value="">— prior.</option>
+        <option value="high">🔴 Červená</option>
+        <option value="medium">⭐ Žlutá</option>
+        <option value="low">💚 Zelená</option>
+        <option value="pink">🩷 Růžová</option>
+      </select>
+      <button class="backlog-add-btn" onclick="addBacklogTask()">+ Přidat</button>
+    </div>
+  </div>
+  <div class="backlog-section" id="vyberkaSection">
+    <div class="backlog-header" onclick="toggleVyberka()">
+      <h3>🗂️ Výběrka</h3>
+      <span class="backlog-toggle" id="vyberkaToggle">▼ skrýt</span>
+    </div>
+    <div class="backlog-body" id="vyberkaBody"></div>
+    <div class="backlog-add">
+      <input class="backlog-input" id="vyberkaInput" placeholder="Přidat do výběrky..." onkeydown="if(event.key==='Enter') addVyberkaTask()">
+      <select class="priority-select" id="vyberkaPri" style="max-width:90px">
+        <option value="">— prior.</option>
+        <option value="high">🔴 Červená</option>
+        <option value="medium">⭐ Žlutá</option>
+        <option value="low">💚 Zelená</option>
+        <option value="pink">🩷 Růžová</option>
+      </select>
+      <button class="backlog-add-btn" onclick="addVyberkaTask()">+ Přidat</button>
+    </div>
+  </div>
+  <div class="backlog-section" id="nakupSection">
+    <div class="backlog-header" onclick="toggleNakupSection()">
+      <h3>📋 Úkoly k zakázkám</h3>
+      <span class="backlog-toggle" id="nakupToggle">▼ skrýt</span>
+    </div>
+    <div class="backlog-body" id="nakupBody"></div>
+    <div class="backlog-add">
+      <input class="backlog-input" id="nakupInput" placeholder="Přidat úkol k zakázce..." onkeydown="if(event.key==='Enter') addNakupItem()">
+      <button class="backlog-add-btn" onclick="addNakupItem()">+ Přidat</button>
+    </div>
+  </div>
+  <div class="backlog-section" id="radekSection">
+    <div class="backlog-header" onclick="toggleRadekSection()">
+      <h3>👤 Úkoly Radek</h3>
+      <span class="backlog-toggle" id="radekToggle">▼ skrýt</span>
+    </div>
+    <div class="backlog-body" id="radekBody"></div>
+    <div class="backlog-add">
+      <input class="backlog-input" id="radekInput" placeholder="Přidat úkol pro Radka..." onkeydown="if(event.key==='Enter') addRadekTask()">
+      <button class="backlog-add-btn" onclick="addRadekTask()">+ Přidat</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<footer>Plán týdne · <span class="sync-link" onclick="exportJSON()">exportovat zálohu</span></footer>
+<div class="mobile-save-bar" id="mobileSaveBar">
+  <button class="mobile-save-btn" id="mobileSaveBtn" onclick="mobileSave()">💾 Uložit do OneDrivu</button>
+</div>
+
+<script>
+const STORAGE_KEY = 'plan-tydne-v3';
+const FSA_DB = 'plan-tydne-fsa';
+const DAYS_CS = ['Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota','Neděle'];
+const DAYS_SHORT = ['Po','Út','St','Čt','Pá','So','Ne'];
+
+let appData = { days: {}, backlog: [], vyberka: [], todos: [], meals: {}, nakup: [] };
+let currentWeekOffset = 0;
+let draggedTask = null;
+let dropTargetId = null;
+let dropPosition = 'after';
+let fileHandle = null;
+let syncEnabled = false;
+let activeCopyTaskId = null;
+let activeCopyKey = null;
+let backlogDropTargetId = null;
+let backlogDropPos = 'after';
+let backlogDoneOpen = false;
+let vyberkaDropTargetId = null;
+let vyberkaDropPos = 'after';
+const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+const canFSA = 'showOpenFilePicker' in window;
+
+// ── STORAGE ──────────────────────────────────────────────
+function loadFromStorage() {
+  try { const r = localStorage.getItem(STORAGE_KEY); if (r) appData = JSON.parse(r); } catch(e) {}
+  if (!appData.vyberka) appData.vyberka = [];
+  if (!appData.todos) appData.todos = [];
+  if (!appData.nakup) appData.nakup = [];
+  if (!appData.radek) appData.radek = [];
+  if (!appData.timeline) appData.timeline = {};
+}
+function saveToStorage(isUserAction = true) {
+  appData._lastModified = Date.now();
+  if (isUserAction) {
+    appData._savedByUser = Date.now();
+    sessionDirty = true; // uživatelka něco změnila v téhle session
+    // Záloha předchozí verze (uchovat poslední dobrou kopii)
+    const prev = localStorage.getItem(STORAGE_KEY);
+    if (prev) {
+      localStorage.setItem(STORAGE_KEY + '-snap2', localStorage.getItem(STORAGE_KEY + '-snap1') || '');
+      localStorage.setItem(STORAGE_KEY + '-snap1', localStorage.getItem(STORAGE_KEY + '-backup') || '');
+      localStorage.setItem(STORAGE_KEY + '-backup', prev);
+    }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+  if (fsaFolderActive()) { fsaSaveToFolder(); return; }
+  if (ghActive()) { ghPush(); return; }
+  if (isMobile) markMobileUnsaved();
+  else if (syncEnabled && fileHandle) writeToDisk();
+}
+function getTs(d) { return d && d._lastModified ? d._lastModified : 0; }
+function mergeWithLocal(fileData) {
+  try {
+    const loc = localStorage.getItem(STORAGE_KEY);
+    const ld = loc ? JSON.parse(loc) : null;
+    if (ld && getTs(ld) > getTs(fileData)) { writeToDisk(); return; }
+    appData = fileData;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+  } catch(e) { appData = fileData; }
+}
+
+// ── FILE SYNC ─────────────────────────────────────────────
+async function setupSync() {
+  if (canFSA) {
+    try {
+      const choice = confirm('Máš už soubor plan-data.json v OneDrivu?\n\nOK = Načíst existující\nZrušit = Vytvořit nový');
+      if (choice) {
+        const [h] = await window.showOpenFilePicker({ types:[{description:'JSON',accept:{'application/json':['.json']}}] });
+        fileHandle = h;
+        appData = JSON.parse(await (await h.getFile()).text());
+        saveToStorage();
+      } else {
+        fileHandle = await window.showSaveFilePicker({ suggestedName:'plan-data.json', types:[{description:'JSON',accept:{'application/json':['.json']}}] });
+        await writeToDisk();
+      }
+      syncEnabled = true;
+      await storeHandle(fileHandle);
+      updateSyncUI(); render();
+    } catch(e) { if (e.name!=='AbortError') console.error(e); }
+  } else { firefoxLoad(); }
+}
+async function writeToDisk() {
+  if (!fileHandle) return;
+  try {
+    const w = await fileHandle.createWritable();
+    await w.write(JSON.stringify(appData, null, 2));
+    await w.close();
+  } catch(e) { console.warn('Write failed:', e); }
+}
+function firefoxLoad() {
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { appData = JSON.parse(await f.text()); saveToStorage(); updateSyncUI('firefox'); render(); }
+    catch { alert('Neplatný soubor.'); }
+  };
+  inp.click();
+}
+function exportJSON() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(appData,null,2)],{type:'application/json'}));
+  a.download = 'plan-data.json'; a.click();
+}
+async function storeHandle(h) {
+  return new Promise((res,rej) => {
+    const req = indexedDB.open(FSA_DB,1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess = e => { const tx=e.target.result.transaction('handles','readwrite'); tx.objectStore('handles').put(h,'main'); tx.oncomplete=res; };
+    req.onerror=rej;
+  });
+}
+async function loadHandle() {
+  return new Promise(res => {
+    const req=indexedDB.open(FSA_DB,1);
+    req.onupgradeneeded=e=>e.target.result.createObjectStore('handles');
+    req.onsuccess=e=>{const g=e.target.result.transaction('handles','readonly').objectStore('handles').get('main');g.onsuccess=()=>res(g.result||null);g.onerror=()=>res(null);};
+    req.onerror=()=>res(null);
+  });
+}
+async function tryRestoreSync() {
+  if (!canFSA) return;
+  const h = await loadHandle(); if (!h) return;
+  const perm = await h.queryPermission({mode:'readwrite'});
+  if (perm==='granted') {
+    fileHandle=h; syncEnabled=true;
+    try { mergeWithLocal(JSON.parse(await (await h.getFile()).text())); } catch(e) {}
+    updateSyncUI(); render();
+  } else if (perm==='prompt') {
+    fileHandle=h; updateSyncUI('prompt');
+    document.addEventListener('click', async function ar() { document.removeEventListener('click',ar); await reconnect(); }, {once:true});
+  }
+}
+async function reconnect() {
+  if (!fileHandle) return;
+  try {
+    const p = await fileHandle.requestPermission({mode:'readwrite'});
+    if (p==='granted') {
+      syncEnabled=true;
+      try { mergeWithLocal(JSON.parse(await (await fileHandle.getFile()).text())); } catch(e) {}
+      updateSyncUI(); render();
+    }
+  } catch(e) {}
+}
+function updateSyncUI(s, errCode) {
+  const dot=document.getElementById('syncDot'), txt=document.getElementById('syncText'), lnk=document.getElementById('syncLink');
+  lnk.style.color=''; lnk.style.fontWeight='';
+  const mbar=document.getElementById('mobileSaveBar');
+  const jbl=document.getElementById('jbLink');
+  const rbar=document.getElementById('fsaReconnectBar');
+  // Schovat reconnect banner ve výchozím stavu, zobrazit jen pro fsa-reconnect
+  if(rbar) rbar.style.display='none';
+  // FSA OneDrive složka stavy
+  if (s==='fsa-ok') {
+    dot.className='sync-dot ok'; txt.textContent='Sync s OneDrive složkou — ukládá se automaticky';
+    lnk.textContent=''; lnk.onclick=null;
+    if(jbl){jbl.textContent='📁 Složka';jbl.onclick=fsaConnectFolder;}
+    if(mbar) mbar.style.display='none'; return;
+  }
+  if (s==='fsa-prompt') {
+    dot.className='sync-dot warn'; txt.textContent='Sync není nastaven — připoj OneDrive složku';
+    lnk.textContent='📁 Připojit složku'; lnk.onclick=fsaConnectFolder;
+    if(jbl){jbl.textContent='📁 Připojit';jbl.onclick=fsaConnectFolder;}
+    if(mbar) mbar.style.display='none'; return;
+  }
+  if (s==='fsa-reconnect') {
+    dot.className='sync-dot warn'; txt.textContent='OneDrive složka — vyžaduje obnovení přístupu';
+    lnk.textContent=''; lnk.onclick=null;
+    if(jbl){jbl.textContent='📁 Složka';jbl.onclick=fsaConnectFolder;}
+    if(rbar){rbar.style.display='flex';}
+    if(mbar) mbar.style.display='none'; return;
+  }
+  // GitHub Gist sync stavy
+  if (s==='gh-setup' || s==='jb-setup') {
+    dot.className='sync-dot warn'; txt.textContent='Cloud sync není nastaven';
+    lnk.textContent='☁️ Nastavit GitHub sync'; lnk.onclick=openGhSetup;
+    if(jbl){jbl.textContent='☁️ Gist';jbl.onclick=openGhSetup;}
+    if(mbar) mbar.style.display='none'; return;
+  }
+  if (s==='gh-ok' || s==='jb-ok' || (ghActive() && !s)) {
+    dot.className='sync-dot ok'; txt.textContent='GitHub Gist sync — ukládá se automaticky';
+    lnk.textContent=''; lnk.onclick=null;
+    if(jbl){jbl.textContent='⚙️ Gist';jbl.onclick=openGhSetup;}
+    if (mbar) mbar.style.display='none'; return;
+  }
+  if (s==='gh-loading' || s==='jb-loading') { dot.className='sync-dot warn'; txt.textContent='Načítám z GitHubu…'; lnk.textContent=''; lnk.onclick=null; if(jbl)jbl.textContent=''; if(mbar)mbar.style.display='none'; return; }
+  if (s==='gh-error' || s==='jb-error') { dot.className='sync-dot'; txt.innerHTML='<span style="color:#ef4444">Chyba cloud syncu' + (errCode ? ' ['+errCode+']' : '') + '</span>'; lnk.textContent='🔄 Zkusit znovu'; lnk.onclick=ghLoad; if(jbl){jbl.textContent='⚙️ Gist';jbl.onclick=openGhSetup;} if(mbar)mbar.style.display='none'; return; }
+  // FSA / Firefox / výchozí
+  if(jbl) jbl.textContent='☁️ Cloud sync';
+  if (syncEnabled) { dot.className='sync-dot ok'; txt.textContent='Sync s OneDrivem'; lnk.textContent=''; lnk.onclick=null; }
+  else if (s==='prompt') { dot.className='sync-dot warn'; txt.textContent='Sync nastaven — klikni pro obnovení'; lnk.textContent='🔄 Obnovit'; lnk.onclick=reconnect; }
+  else if (s==='firefox') { dot.className='sync-dot ok'; txt.textContent='Data načtena'; lnk.textContent='💾 Uložit'; lnk.onclick=()=>{exportJSON();updateSyncUI('firefox-saved');}; }
+  else if (s==='firefox-saved') { dot.className='sync-dot ok'; txt.textContent='Uloženo ✓'; lnk.textContent='📂 Načíst jiný'; lnk.onclick=firefoxLoad; }
+  else { dot.className='sync-dot'; txt.textContent='Ukládám v prohlížeči'; lnk.textContent=''; lnk.onclick=null; }
+}
+let hasUnsavedMobile=false;
+function markMobileUnsaved() {
+  if (!isMobile) return; hasUnsavedMobile=true;
+  const bar=document.getElementById('mobileSaveBar'),btn=document.getElementById('mobileSaveBtn');
+  bar.style.display='block'; btn.textContent='💾 Uložit do OneDrivu'; btn.className='mobile-save-btn';
+}
+function mobileSave() {
+  exportJSON(); hasUnsavedMobile=false;
+  const btn=document.getElementById('mobileSaveBtn');
+  btn.textContent='✓ Staženo'; btn.className='mobile-save-btn saved';
+  setTimeout(()=>{document.getElementById('mobileSaveBar').style.display='none';},3000);
+}
+
+// ── FSA ONEDRIVE SLOŽKA SYNC ─────────────────────────────
+const DATA_FILENAME = 'plan-tydne-data.json';
+let fsaDirHandle = null;
+let fsaSavedHandle = null; // uložený handle čekající na obnovení oprávnění
+let fsaSaving = false;
+
+async function idbPut(store, key, val) {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('plan-fsa-v1', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore(store);
+    r.onsuccess = e => { const tx = e.target.result.transaction(store,'readwrite'); tx.objectStore(store).put(val,key).onsuccess=res; tx.onerror=rej; };
+    r.onerror = rej;
+  });
+}
+async function idbGet(store, key) {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('plan-fsa-v1', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore(store);
+    r.onsuccess = e => { const tx = e.target.result.transaction(store,'readonly'); const q=tx.objectStore(store).get(key); q.onsuccess=()=>res(q.result); q.onerror=rej; };
+    r.onerror = rej;
+  });
+}
+
+async function fsaConnectFolder() {
+  try {
+    const h = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+    fsaDirHandle = h;
+    await idbPut('handles', 'dirHandle', h);
+    await fsaLoadFromFolder();
+    render();
+    updateSyncUI('fsa-ok');
+  } catch(e) { /* uživatel zrušil */ }
+}
+
+async function fsaRestoreFolder() {
+  try {
+    const h = await idbGet('handles', 'dirHandle');
+    if (!h) return;
+    const perm = await h.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') { fsaDirHandle = h; return; }
+    // Potřebujeme klik uživatele — uložíme handle a ukážeme tlačítko
+    fsaSavedHandle = h;
+  } catch(e) {}
+}
+
+async function fsaReconnect() {
+  const h = fsaSavedHandle || await idbGet('handles', 'dirHandle');
+  if (!h) { fsaConnectFolder(); return; }
+  try {
+    const req = await h.requestPermission({ mode: 'readwrite' });
+    if (req === 'granted') {
+      fsaDirHandle = h; fsaSavedHandle = null;
+      await idbPut('handles', 'dirHandle', h);
+      await fsaLoadFromFolder();
+      render(); updateSyncUI('fsa-ok');
+    }
+  } catch(e) { fsaConnectFolder(); }
+}
+
+async function fsaLoadFromFolder() {
+  if (!fsaDirHandle) return;
+  try {
+    const fh = await fsaDirHandle.getFileHandle(DATA_FILENAME, { create: false });
+    const file = await fh.getFile();
+    const remote = JSON.parse(await file.text());
+    const localTs = appData ? (appData._savedByUser || appData._lastModified || 0) : 0;
+    const remoteTs = remote._savedByUser || remote._lastModified || 0;
+    if (remoteTs > localTs) {
+      appData = remote;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+    }
+  } catch(e) { /* soubor ještě neexistuje */ }
+}
+
+async function fsaSaveToFolder() {
+  if (!fsaDirHandle || fsaSaving) return;
+  fsaSaving = true;
+  try {
+    const fh = await fsaDirHandle.getFileHandle(DATA_FILENAME, { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(appData));
+    await w.close();
+    updateSyncUI('fsa-ok');
+  } catch(e) {
+    updateSyncUI('fsa-prompt');
+    fsaDirHandle = null;
+  } finally { fsaSaving = false; }
+}
+
+function fsaFolderActive() { return !!fsaDirHandle; }
+
+// ── GITHUB GIST SYNC ────────────────────────────────────────
+const GH_TOKEN_STORE = 'plan-gh-token';
+const GH_GIST_STORE  = 'plan-gh-gist';
+const GH_FILENAME    = 'plan-tydne-data.json';
+// Vyčistit případné staré JSONBin záznamy
+localStorage.removeItem('plan-jb-key');
+localStorage.removeItem('plan-jb-bin');
+
+let ghToken = localStorage.getItem(GH_TOKEN_STORE) || '';
+let ghGist  = localStorage.getItem(GH_GIST_STORE)  || '';
+
+function ghActive() { return !!(ghToken && ghGist); }
+
+async function ghLoad() {
+  if (!ghActive()) return;
+  updateSyncUI('gh-loading');
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (attempt > 1) await new Promise(res => setTimeout(res, attempt * 800));
+      const r = await fetch(`https://api.github.com/gists/${ghGist}`, {
+        headers: { 'Authorization': `token ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' }
+      });
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      const fileContent = data.files[GH_FILENAME]?.content;
+      if (!fileContent) throw new Error('Soubor v Gistu nenalezen');
+      const cloud = JSON.parse(fileContent);
+      const loc = localStorage.getItem(STORAGE_KEY);
+      const ld = loc ? JSON.parse(loc) : null;
+      const localTs = ld ? (ld._savedByUser || ld._lastModified || 0) : 0;
+      const cloudTs = cloud._savedByUser || cloud._lastModified || 0;
+      if (ld && localTs > cloudTs) {
+        appData = ld;
+        ghPush();
+      } else {
+        appData = cloud;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+      }
+      updateSyncUI('gh-ok'); render();
+      return;
+    } catch(e) { lastErr = e; }
+  }
+  updateSyncUI('gh-error', lastErr ? lastErr.message : '?');
+}
+
+async function ghPush() {
+  if (!ghActive()) return;
+  try {
+    const r = await fetch(`https://api.github.com/gists/${ghGist}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${ghToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({ files: { [GH_FILENAME]: { content: JSON.stringify(appData) } } })
+    });
+    if (!r.ok) throw new Error(r.status);
+    updateSyncUI('gh-ok');
+  } catch(e) { updateSyncUI('gh-error', e.message); }
+}
+
+async function ghCreateGist() {
+  const r = await fetch('https://api.github.com/gists', {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${ghToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github.v3+json'
+    },
+    body: JSON.stringify({
+      description: 'Plan tydne KV data',
+      public: false,
+      files: { [GH_FILENAME]: { content: JSON.stringify(appData) } }
+    })
+  });
+  if (!r.ok) throw new Error('Chyba při vytváření Gistu (' + r.status + ')');
+  const data = await r.json();
+  return data.id;
+}
+
+function openGhSetup() {
+  if (document.getElementById('ghModal')) return;
+  const modal = document.createElement('div');
+  modal.className = 'jb-modal'; modal.id = 'ghModal';
+  modal.innerHTML = `<div class="jb-box">
+    <h3>☁️ GitHub Gist sync</h3>
+    <p style="font-size:12px;color:#666;margin:0 0 8px">Zadej GitHub Personal Access Token (scope: <b>gist</b>). Gist ID nechej prázdné — vytvoří se automaticky.</p>
+    <input class="jb-input" id="ghTokenInp" placeholder="ghp_xxxxxxxxxxxx" value="${ghToken}">
+    <input class="jb-input" id="ghGistInp" placeholder="Gist ID (volitelné — pro druhé zařízení)" value="${ghGist}">
+    <div class="jb-btn-row">
+      <button class="jb-btn jb-btn-secondary" onclick="closeGhSetup()">Zrušit</button>
+      <button class="jb-btn jb-btn-primary" onclick="connectGh()">Připojit</button>
+    </div>
+    <div class="jb-status" id="ghStatus"></div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+function closeGhSetup() { const m=document.getElementById('ghModal'); if(m)m.remove(); }
+
+async function connectGh() {
+  const tokenInp = document.getElementById('ghTokenInp');
+  const gistInp  = document.getElementById('ghGistInp');
+  const st       = document.getElementById('ghStatus');
+  ghToken = tokenInp.value.trim();
+  const gistId = gistInp.value.trim();
+  st.textContent = '\u23F3 Připojuji...';
+  try {
+    let id = gistId;
+    if (!id) {
+      id = await ghCreateGist();
+      st.innerHTML = `\u2705 Gist vytvořen! Gist ID pro telefon:<div class="jb-bin-result">${id}</div>`;
+    } else {
+      const r = await fetch(`https://api.github.com/gists/${id}`, {
+        headers: { 'Authorization': `token ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' }
+      });
+      if (!r.ok) throw new Error('Nepodařilo se připojit — zkontroluj token a Gist ID');
+      const data = await r.json();
+      const fileContent = data.files[GH_FILENAME]?.content;
+      if (fileContent) {
+        const cloud = JSON.parse(fileContent);
+        if (getTs(cloud) > getTs(appData)) { appData = cloud; localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
+      }
+      st.textContent = '\u2705 Připojeno!';
+    }
+    ghGist = id;
+    localStorage.setItem(GH_TOKEN_STORE, ghToken);
+    localStorage.setItem(GH_GIST_STORE, id);
+    updateSyncUI('gh-ok'); render();
+    if (gistId) setTimeout(closeGhSetup, 1200);
+  } catch(e) { st.textContent = '\u274C ' + (e.message || 'Chyba připojení'); }
+}
+
+// Zpětná kompatibilita — staré JSONBin volání přesměrovat na Gist
+function jbActive() { return false; }
+function openJbSetup() { openGhSetup(); }
+function closeJbSetup() { closeGhSetup(); }
+
+// ── DATES ──────────────────────────────────────────────────
+function getWeekDates(offset) {
+  const t=new Date(), dow=t.getDay(), m=new Date(t);
+  m.setDate(t.getDate()-(dow===0?6:dow-1)+offset*7);
+  return Array.from({length:7},(_,i)=>{const d=new Date(m);d.setDate(m.getDate()+i);return d;});
+}
+function dateKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function isToday(d){const t=new Date();return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate();}
+function makeid(){return Math.random().toString(36).slice(2,10);}
+function todayKey(){return dateKey(new Date());}
+
+// ── AUTO ROLLOVER ──────────────────────────────────────────
+function checkAutoRollover() {
+  const now=new Date(), dow=now.getDay(), h=now.getHours();
+  // Spustí se v neděli po 20:00 nebo při otevření v novém týdnu
+  const monday=new Date(now); monday.setDate(now.getDate()-(dow===0?6:dow-1)); monday.setHours(0,0,0,0);
+  const mondayKey=dateKey(monday);
+  if (appData._lastRollover && appData._lastRollover >= mondayKey) return;
+  // Podmínka: neděle po 20h nebo pondělí+
+  const prevMonday=new Date(monday); prevMonday.setDate(monday.getDate()-7);
+  const prevMondayKey=dateKey(prevMonday);
+  const prevSunday=new Date(monday); prevSunday.setDate(monday.getDate()-1); prevSunday.setHours(20,0,0,0);
+  if (now < prevSunday) return; // Ještě není čas
+  let moved=0;
+  for (const key of Object.keys(appData.days)) {
+    if (key >= mondayKey) continue; // Jen minulé dny
+    const tasks=appData.days[key]||[];
+    const incomplete=tasks.filter(t=>!t.done);
+    if (!incomplete.length) continue;
+    appData.days[key]=tasks.filter(t=>t.done);
+    incomplete.forEach(t=>{
+      appData.backlog.unshift({...t, id:makeid(), rolledOver:true, rolledFrom:key});
+      moved++;
+    });
+  }
+  if (moved>0) {
+    appData._lastRollover=mondayKey;
+    saveToStorage(false); // systémová akce — nepovyšovat _savedByUser timestamp
+    showToast(`${moved} nedokončených úkolů přesunuto do Inboxu 🔄`);
+  } else {
+    appData._lastRollover=mondayKey;
+  }
+}
+
+
+// ── RENDER ─────────────────────────────────────────────────
+function personClass(text) {
+  if (/radek|radka|radkem/i.test(text)) return ' person-radek';
+  if (/\biso\b/i.test(text)) return ' tag-iso';
+  if (/kája|kaja|karolína|karolina/i.test(text)) return ' tag-kaja';
+  return '';
+}
+
+function render() {
+  closeCopyPopup();
+  const dates=getWeekDates(currentWeekOffset);
+  const fmt=d=>d.toLocaleDateString('cs-CZ',{day:'numeric',month:'long'});
+  document.getElementById('weekLabel').textContent=`${fmt(dates[0])} – ${fmt(dates[6])}`;
+  let total=0,done=0;
+  dates.forEach(d=>{const ts=appData.days[dateKey(d)]||[];total+=ts.length;done+=ts.filter(x=>x.done).length;});
+  document.getElementById('statsBar').innerHTML=
+    `<span>Tento týden: <b>${total}</b></span><span>Splněno: <b>${done}</b></span><span>Zbývá: <b>${total-done}</b></span>`+
+    (appData.backlog.length?`<span>Inbox: <b>${appData.backlog.filter(x=>!x.done).length}</b></span>`:'');
+
+  const grid=document.getElementById('weekGrid'); grid.innerHTML='';
+  dates.forEach((d,i)=>{
+    const key=dateKey(d),tasks=appData.days[key]||[],today=isToday(d);
+    const col=document.createElement('div');
+    col.className='day-col'+(today?' is-today':'');
+    col.dataset.key=key;
+    col.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();col.classList.add('drag-over');});
+    col.addEventListener('drop',e=>onDayDrop(e,col));
+    col.addEventListener('dragleave',e=>{if(!col.contains(e.relatedTarget))col.classList.remove('drag-over');});
+    const pending=tasks.filter(t=>!t.done).length;
+    col.innerHTML=`
+      <div class="day-header">
+        <div>
+          <div class="day-name">${DAYS_CS[i]}${today?' · Dnes':''}</div>
+          <div class="day-date">${d.getDate()}. ${d.toLocaleDateString('cs-CZ',{month:'short'})}</div>
+        </div>
+        ${tasks.length?`<span class="day-count">${pending>0?pending:'✓'}</span>`:''}
+      </div>
+      <div class="task-list" id="tl-${key}">
+        ${tasks.length===0?'<div class="empty-hint">Přetáhni sem nebo klikni +</div>':''}
+        ${tasks.map((t,idx)=>`<div class="drop-indicator" id="di-${key}-${idx}"></div>${renderTask(t,key)}`).join('')}
+        <div class="drop-indicator" id="di-${key}-${tasks.length}"></div>
+      </div>
+      <div class="add-task-area">
+        <div class="add-task-form" id="form-${key}">
+          <textarea class="add-task-input" id="inp-${key}" rows="2" placeholder="Název úkolu..."></textarea>
+          <div class="add-task-controls">
+            <select class="priority-select" id="pri-${key}">
+              <option value="">— priorita</option>
+              <option value="high">🔴 Červená</option>
+              <option value="medium">⭐ Žlutá</option>
+              <option value="low">💚 Zelená</option>
+              <option value="pink">🩷 Růžová</option>
+            </select>
+          </div>
+          <div class="add-task-controls">
+            <button class="add-cancel-btn" onclick="hideForm('${key}')">Zrušit</button>
+            <button class="add-confirm-btn" onclick="addTask('${key}')">Přidat</button>
+          </div>
+        </div>
+        <button class="add-task-btn" id="addbtn-${key}" onclick="showForm('${key}')">+ Přidat</button>
+      </div>`;
+    grid.appendChild(col);
+  });
+  renderTimeline();
+  renderBacklog();
+  renderVyberka();
+  renderNakup();
+  renderRadek();
+}
+
+function renderTask(t,key) {
+  const prioClass=t.priority?` has-priority-${t.priority}`:'';
+  const rollClass=t.rolledOver?' rolled-over':'';
+  return `<div class="task-item${t.done?' done':''}${prioClass}${rollClass}${personClass(t.text)}"
+    id="ti-${t.id}" draggable="true"
+    ondragstart="onTaskDragStart(event,'${key}','${t.id}')"
+    ondragend="onDragEnd(event)"
+    ondragover="onTaskDragOver(event,'${key}','${t.id}')"
+    ondragleave="onTaskDragLeave(event,'${key}','${t.id}')">
+    <div class="task-check" onclick="toggleTask('${key}','${t.id}')">${t.done?'✓':''}</div>
+    <div class="task-body" ondblclick="startEdit('${key}','${t.id}')">
+      <div class="task-text" id="tt-${t.id}">${esc(t.text)}</div>
+    </div>
+    <div class="task-actions">
+      <button class="task-action-btn" onclick="openCopyPopup(event,'${key}','${t.id}')" title="Kopírovat">⧉</button>
+      <button class="task-action-btn" onclick="startEdit('${key}','${t.id}')" title="Upravit">✏️</button>
+      <button class="task-del-btn" onclick="delTask('${key}','${t.id}')" title="Smazat">✕</button>
+    </div>
+  </div>`;
+}
+
+function renderBacklogItem(t, idx, prefix) {
+  const prioClass=t.priority?` priority-${t.priority}`:'';
+  const rollClass=t.rolledOver?' rolled-over':'';
+  return `<div class="backlog-drop-indicator" id="${prefix}di-${idx}"></div>
+  <div class="backlog-task${prioClass}${rollClass}${personClass(t.text)}${t.done?' done':''}"
+    id="bti-${t.id}" draggable="true"
+    ondragstart="onBacklogDragStart(event,'${t.id}')" ondragend="onDragEnd(event)"
+    ondragover="onBacklogItemDragOver(event,'${t.id}')"
+    ondragleave="onBacklogItemDragLeave(event)">
+    <div class="backlog-check" onclick="toggleBacklogTask('${t.id}')">${t.done?'✓':''}</div>
+    <span class="backlog-task-text" id="btt-${t.id}" ondblclick="startBacklogEdit('${t.id}')" style="flex:1">${esc(t.text)}</span>
+    <div class="task-actions">
+      <button class="task-action-btn" onclick="startBacklogEdit('${t.id}')" title="Upravit">✏️</button>
+      <button class="task-del-btn" onclick="delBacklog('${t.id}')">✕</button>
+    </div>
+  </div>`;
+}
+function renderBacklog() {
+  const body=document.getElementById('backlogBody'), items=appData.backlog||[];
+  body.ondragover=e=>{e.preventDefault();};
+  body.ondrop=onBacklogDrop;
+  body.ondragleave=e=>{if(!body.contains(e.relatedTarget))body.classList.remove('drag-over');};
+  if (!items.length){body.innerHTML='<div class="empty-hint" style="width:100%">Žádné úkoly bez data.</div>';return;}
+  const active=items.filter(t=>!t.done);
+  const done=items.filter(t=>t.done);
+  let html=active.map((t,idx)=>renderBacklogItem(t,idx,'b')).join('')
+    +`<div class="backlog-drop-indicator" id="bdi-${active.length}"></div>`;
+  if (done.length) {
+    html+=`<div class="done-toggle" onclick="backlogDoneOpen=!backlogDoneOpen;renderBacklog()">
+      ${backlogDoneOpen?'▼':'▶'} Splněno (${done.length})
+    </div>`;
+    if (backlogDoneOpen) html+=done.map((t,idx)=>renderBacklogItem(t,idx,'bd')).join('');
+  }
+  body.innerHTML=html;
+}
+function onBacklogItemDragOver(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  const el=document.getElementById('bti-'+id); if(!el)return;
+  const rect=el.getBoundingClientRect();
+  backlogDropPos=e.clientY<rect.top+rect.height/2?'before':'after';
+  backlogDropTargetId=id;
+  document.querySelectorAll('.backlog-drop-indicator').forEach(el=>el.classList.remove('visible'));
+  const items=appData.backlog||[];
+  const idx=items.findIndex(t=>t.id===id);
+  const di=document.getElementById('bdi-'+(backlogDropPos==='before'?idx:idx+1));
+  if(di)di.classList.add('visible');
+}
+function onBacklogItemDragLeave(e) {
+  // Indikátor zůstane dokud nepustím nebo neopustím celý backlog
+}
+
+// ── VÝBĚRKA ────────────────────────────────────────────────
+function renderVyberka() {
+  if (!appData.vyberka) appData.vyberka = [];
+  const body = document.getElementById('vyberkaBody'), items = appData.vyberka;
+  body.ondragover = e => { e.preventDefault(); body.classList.add('drag-over'); };
+  body.ondrop = e => {
+    e.preventDefault(); body.classList.remove('drag-over');
+    document.querySelectorAll('#vyberkaBody .backlog-drop-indicator').forEach(el=>el.classList.remove('visible'));
+    if (!draggedTask) return;
+    if (draggedTask.type === 'vyberka') {
+      // Reorder uvnitř výběrky
+      if (!vyberkaDropTargetId) { vyberkaDropTargetId=null; return; }
+      const vl = appData.vyberka;
+      const srcIdx = vl.findIndex(t=>t.id===draggedTask.id); if(srcIdx===-1)return;
+      const [task] = vl.splice(srcIdx,1);
+      let tIdx = vl.findIndex(t=>t.id===vyberkaDropTargetId);
+      if(tIdx===-1){vl.push(task);}
+      else{const ins=vyberkaDropPos==='before'?tIdx:tIdx+1; vl.splice(ins,0,task);}
+      vyberkaDropTargetId=null; draggedTask=null; saveToStorage(); render(); return;
+    }
+    // Z jiného zdroje do výběrky
+    const task = popTask(draggedTask);
+    if (task) {
+      if(vyberkaDropTargetId){
+        const vl=appData.vyberka; const tIdx=vl.findIndex(t=>t.id===vyberkaDropTargetId);
+        const ins=vyberkaDropPos==='before'?tIdx:tIdx+1; vl.splice(Math.max(0,ins),0,task);
+      } else { appData.vyberka.unshift(task); }
+    }
+    vyberkaDropTargetId=null; draggedTask=null; saveToStorage(); render();
+  };
+  body.ondragleave = e => { if (!body.contains(e.relatedTarget)) body.classList.remove('drag-over'); };
+  if (!items.length) { body.innerHTML = '<div class="empty-hint" style="width:100%">Žádné položky.</div>'; return; }
+  body.innerHTML = items.map((t, idx) => {
+    const prioClass = t.priority ? ` priority-${t.priority}` : '';
+    const rollClass = t.rolledOver ? ' rolled-over' : '';
+    return `<div class="backlog-drop-indicator" id="vdi-${idx}"></div>
+    <div class="backlog-task${prioClass}${rollClass}${personClass(t.text)}${t.done ? ' done' : ''}"
+      id="vti-${t.id}" draggable="true"
+      ondragstart="onVyberkaDragStart(event,'${t.id}')"
+      ondragend="onDragEnd(event)"
+      ondragover="onVyberkaItemDragOver(event,'${t.id}')"
+      ondragleave="onVyberkaItemDragLeave(event)">
+      <div class="backlog-check" onclick="toggleVyberkaTask('${t.id}')">${t.done ? '✓' : ''}</div>
+      <span class="backlog-task-text" id="vtt-${t.id}" ondblclick="startVyberkaEdit('${t.id}')" style="flex:1">${esc(t.text)}</span>
+      <div class="task-actions">
+        <button class="task-action-btn" onclick="startVyberkaEdit('${t.id}')" title="Upravit">✏️</button>
+        <button class="task-del-btn" onclick="delVyberka('${t.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('') + `<div class="backlog-drop-indicator" id="vdi-${items.length}"></div>`;
+}
+function onVyberkaItemDragOver(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  const el=document.getElementById('vti-'+id); if(!el)return;
+  const rect=el.getBoundingClientRect();
+  vyberkaDropPos=e.clientY<rect.top+rect.height/2?'before':'after';
+  vyberkaDropTargetId=id;
+  document.querySelectorAll('#vyberkaBody .backlog-drop-indicator').forEach(el=>el.classList.remove('visible'));
+  const items=appData.vyberka||[];
+  const idx=items.findIndex(t=>t.id===id);
+  const di=document.getElementById('vdi-'+(vyberkaDropPos==='before'?idx:idx+1));
+  if(di)di.classList.add('visible');
+}
+function onVyberkaItemDragLeave(e) {}
+function onVyberkaDragStart(e, id) {
+  draggedTask = { type: 'vyberka', id };
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => { const el = document.getElementById('vti-' + id); if (el) el.classList.add('dragging'); }, 0);
+}
+function toggleVyberka() {
+  const b = document.getElementById('vyberkaBody'), t = document.getElementById('vyberkaToggle');
+  b.classList.toggle('collapsed'); t.textContent = b.classList.contains('collapsed') ? '▶ zobrazit' : '▼ skrýt';
+}
+function addVyberkaTask() {
+  const inp = document.getElementById('vyberkaInput'), text = inp.value.trim(); if (!text) return;
+  const pri = document.getElementById('vyberkaPri').value;
+  if (!appData.vyberka) appData.vyberka = [];
+  appData.vyberka.push({ id: makeid(), text, priority: pri || undefined, created: Date.now() });
+  inp.value = ''; document.getElementById('vyberkaPri').value = ''; saveToStorage(); render();
+}
+function toggleVyberkaTask(id) {
+  const t = (appData.vyberka || []).find(t => t.id === id);
+  if (t) {
+    t.done = !t.done;
+    appData.vyberka = [...appData.vyberka.filter(x => !x.done), ...appData.vyberka.filter(x => x.done)];
+    saveToStorage(); render();
+  }
+}
+function delVyberka(id) { appData.vyberka = (appData.vyberka || []).filter(t => t.id !== id); saveToStorage(); render(); }
+function startVyberkaEdit(id) {
+  const el = document.getElementById('vtt-' + id); if (!el) return;
+  const t = (appData.vyberka || []).find(t => t.id === id); if (!t) return;
+  const orig = t.text;
+  el.innerHTML = `<textarea class="task-edit-input" id="vedit-${id}" rows="2">${esc(orig)}</textarea>`;
+  const inp = document.getElementById('vedit-' + id); inp.focus(); inp.select();
+  inp.onblur = () => saveVyberkaEdit(id, inp.value);
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveVyberkaEdit(id, inp.value); } if (e.key === 'Escape') { t.text = orig; render(); } };
+}
+function saveVyberkaEdit(id, val) {
+  const text = val.trim(); if (!text) return;
+  const t = (appData.vyberka || []).find(t => t.id === id); if (!t) return;
+  t.text = text; saveToStorage(); render();
+}
+document.getElementById('vyberkaInput').addEventListener('keydown', e => { if (e.key === 'Enter') addVyberkaTask(); });
+
+// ── HELPER: vyjmout úkol z jeho zdroje ─────────────────────
+// Mapování type → pole v appData (pro typy s přímým polem)
+const TYPE_ARRAY = { backlog:'backlog', vyberka:'vyberka', nakup:'nakup', radek:'radek', todos:'todos' };
+function popTask(dt) {
+  if (!dt) return null;
+  if (dt.type === 'day') {
+    const arr = appData.days[dt.key] || [];
+    const idx = arr.findIndex(t => t.id === dt.id); if (idx === -1) return null;
+    return arr.splice(idx, 1)[0];
+  }
+  const arrName = TYPE_ARRAY[dt.type];
+  if (!arrName) return null;
+  const arr = appData[arrName] || [];
+  const idx = arr.findIndex(t => t.id === dt.id); if (idx === -1) return null;
+  return arr.splice(idx, 1)[0];
+}
+
+// ── GENERICKÝ DROP PRO JEDNODUCHÉ LISTY ────────────────────
+function setupSimpleDrop(bodyId, arrayName) {
+  const body = document.getElementById(bodyId); if (!body) return;
+  body.ondragover = e => { e.preventDefault(); body.classList.add('drag-over'); };
+  body.ondragleave = e => { if (!body.contains(e.relatedTarget)) body.classList.remove('drag-over'); };
+  body.ondrop = e => {
+    e.preventDefault(); body.classList.remove('drag-over');
+    if (!draggedTask || draggedTask.type === arrayName) return; // neprohazovat uvnitř stejného listu
+    const task = popTask(draggedTask);
+    if (!task) return;
+    if (!appData[arrayName]) appData[arrayName] = [];
+    appData[arrayName].unshift({...task, done: false});
+    draggedTask = null; saveToStorage(); render();
+  };
+}
+
+// ── ÚKOLY RADEK ────────────────────────────────────────────
+function radekTaskHtml(t) {
+  const doneCls = t.done ? ' done' : '';
+  return `<div class="backlog-task person-radek${doneCls}" id="rti-${t.id}"
+    draggable="true"
+    ondragstart="draggedTask={type:'radek',id:'${t.id}'};event.dataTransfer.effectAllowed='move';setTimeout(()=>{const el=document.getElementById('rti-${t.id}');if(el)el.classList.add('dragging');},0)"
+    ondragend="onDragEnd(event)">
+    <div class="backlog-check${t.done?' done':''}" onclick="toggleRadekTask('${t.id}')">${t.done ? '✓' : ''}</div>
+    <span class="backlog-task-text" id="rtt-${t.id}" ondblclick="startRadekEdit('${t.id}')" style="flex:1${t.done?';text-decoration:line-through;color:var(--muted)':''}">${esc(t.text)}</span>
+    <div class="task-actions">
+      <button class="task-action-btn" onclick="startRadekEdit('${t.id}')" title="Upravit">✏️</button>
+      <button class="task-del-btn" onclick="delRadek('${t.id}')">✕</button>
+    </div>
+  </div>`;
+}
+function startRadekEdit(id) {
+  const el = document.getElementById('rtt-' + id); if (!el) return;
+  const t = (appData.radek || []).find(t => t.id === id); if (!t) return;
+  const orig = t.text;
+  el.innerHTML = `<textarea class="task-edit-input" id="redit-${id}" rows="2">${esc(orig)}</textarea>`;
+  const inp = document.getElementById('redit-' + id); inp.focus(); inp.select();
+  inp.onblur = () => saveRadekEdit(id, inp.value);
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveRadekEdit(id, inp.value); } if (e.key === 'Escape') { t.text = orig; renderRadek(); } };
+}
+function saveRadekEdit(id, val) {
+  const text = val.trim(); if (!text) return;
+  const t = (appData.radek || []).find(t => t.id === id); if (!t) return;
+  t.text = text; saveToStorage(); renderRadek();
+}
+function renderRadek() {
+  if (!appData.radek) appData.radek = [];
+  setupSimpleDrop('radekBody', 'radek');
+  const body = document.getElementById('radekBody'), items = appData.radek;
+  if (!items.length) { body.innerHTML = '<div class="empty-hint" style="width:100%">Žádné úkoly.</div>'; return; }
+  const active = items.filter(t => !t.done), done = items.filter(t => t.done);
+  body.innerHTML = active.map(t => radekTaskHtml(t)).join('') +
+    (done.length ? `<div class="done-toggle" onclick="radekDoneOpen=!radekDoneOpen;renderRadek()">${radekDoneOpen ? '▼' : '▶'} Hotovo (${done.length})</div>`
+      + (radekDoneOpen ? done.map(t => radekTaskHtml(t)).join('') : '') : '');
+}
+let radekDoneOpen = false;
+function toggleRadekSection() { const b=document.getElementById('radekBody'),t=document.getElementById('radekToggle');b.classList.toggle('collapsed');t.textContent=b.classList.contains('collapsed')?'▶ zobrazit':'▼ skrýt'; }
+function addRadekTask() {
+  const inp=document.getElementById('radekInput'),text=inp.value.trim(); if(!text)return;
+  if(!appData.radek)appData.radek=[];
+  appData.radek.unshift({id:makeid(),text,done:false,created:Date.now()});
+  inp.value=''; saveToStorage(); renderRadek();
+}
+function toggleRadekTask(id) {
+  const t=(appData.radek||[]).find(t=>t.id===id); if(!t)return;
+  t.done=!t.done;
+  appData.radek=[...appData.radek.filter(x=>!x.done),...appData.radek.filter(x=>x.done)];
+  saveToStorage(); renderRadek();
+}
+function delRadek(id){appData.radek=(appData.radek||[]).filter(t=>t.id!==id);saveToStorage();renderRadek();}
+document.getElementById('radekInput').addEventListener('keydown',e=>{if(e.key==='Enter')addRadekTask();});
+
+// ── ÚKOLY K ZAKÁZKÁM ───────────────────────────────────────
+function renderNakup() {
+  if (!appData.nakup) appData.nakup = [];
+  setupSimpleDrop('nakupBody', 'nakup', renderNakup);
+  const body = document.getElementById('nakupBody'), items = appData.nakup;
+  if (!items.length) { body.innerHTML = '<div class="empty-hint" style="width:100%">Prázdný seznam.</div>'; return; }
+  const active = items.filter(t => !t.done), done = items.filter(t => t.done);
+  const nakupRow = t => `
+    <div class="backlog-task${t.done ? ' done' : ''}" id="nti-${t.id}">
+      <div class="backlog-check${t.done?' done':''}" onclick="toggleNakupItem('${t.id}')">${t.done ? '✓' : ''}</div>
+      <span class="backlog-task-text" id="ntt-${t.id}" ondblclick="startNakupEdit('${t.id}')" style="flex:1${t.done?';text-decoration:line-through;color:var(--muted)':''}">${esc(t.text)}</span>
+      <div class="task-actions">
+        <button class="task-action-btn" onclick="startNakupEdit('${t.id}')" title="Upravit">✏️</button>
+        <button class="task-del-btn" onclick="delNakup('${t.id}')">✕</button>
+      </div>
+    </div>`;
+  body.innerHTML = active.map(nakupRow).join('') +
+    (done.length ? `<div class="done-toggle" onclick="nakupDoneOpen=!nakupDoneOpen;renderNakup()">${nakupDoneOpen ? '▼' : '▶'} Hotovo (${done.length})</div>`
+      + (nakupDoneOpen ? done.map(nakupRow).join('') : '') : '');
+}
+let nakupDoneOpen = false;
+function toggleNakupSection() { const b=document.getElementById('nakupBody'),t=document.getElementById('nakupToggle');b.classList.toggle('collapsed');t.textContent=b.classList.contains('collapsed')?'▶ zobrazit':'▼ skrýt'; }
+function addNakupItem() {
+  const inp=document.getElementById('nakupInput'),text=inp.value.trim(); if(!text)return;
+  if(!appData.nakup)appData.nakup=[];
+  appData.nakup.unshift({id:makeid(),text,done:false,created:Date.now()});
+  inp.value=''; saveToStorage(); renderNakup();
+}
+function toggleNakupItem(id) {
+  const t=(appData.nakup||[]).find(t=>t.id===id); if(!t)return;
+  t.done=!t.done;
+  appData.nakup=[...appData.nakup.filter(x=>!x.done),...appData.nakup.filter(x=>x.done)];
+  saveToStorage(); renderNakup();
+}
+function delNakup(id){appData.nakup=(appData.nakup||[]).filter(t=>t.id!==id);saveToStorage();renderNakup();}
+function startNakupEdit(id) {
+  const el = document.getElementById('ntt-' + id); if (!el) return;
+  const t = (appData.nakup || []).find(t => t.id === id); if (!t) return;
+  const orig = t.text;
+  el.innerHTML = `<textarea class="task-edit-input" id="nedit-${id}" rows="2">${esc(orig)}</textarea>`;
+  const inp = document.getElementById('nedit-' + id); inp.focus(); inp.select();
+  inp.onblur = () => saveNakupEdit(id, inp.value);
+  inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNakupEdit(id, inp.value); } if (e.key === 'Escape') { t.text = orig; renderNakup(); } };
+}
+function saveNakupEdit(id, val) {
+  const text = val.trim(); if (!text) return;
+  const t = (appData.nakup || []).find(t => t.id === id); if (!t) return;
+  t.text = text; saveToStorage(); renderNakup();
+}
+document.getElementById('nakupInput').addEventListener('keydown',e=>{if(e.key==='Enter')addNakupItem();});
+
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── ACTIONS ────────────────────────────────────────────────
+function showForm(key){document.getElementById('form-'+key).classList.add('visible');document.getElementById('addbtn-'+key).style.display='none';setTimeout(()=>document.getElementById('inp-'+key).focus(),40);}
+function hideForm(key){document.getElementById('form-'+key).classList.remove('visible');document.getElementById('addbtn-'+key).style.display='';document.getElementById('inp-'+key).value='';}
+function addTask(key){
+  const inp=document.getElementById('inp-'+key), text=inp.value.trim(); if(!text)return;
+  const pri=document.getElementById('pri-'+key).value;
+  const id=makeid();
+  if(!appData.days[key])appData.days[key]=[];
+  appData.days[key].push({id, text, done:false, priority:pri||undefined, created:Date.now()});
+  saveToStorage(); hideForm(key); render();
+}
+function toggleTask(key,id){
+  const t=(appData.days[key]||[]).find(t=>t.id===id);
+  if(t){t.done=!t.done; saveToStorage(); render();}
+}
+function delTask(key,id){
+  if(appData.days[key]){appData.days[key]=appData.days[key].filter(t=>t.id!==id);saveToStorage();render();}
+}
+function toggleBacklogTask(id){
+  const t=(appData.backlog||[]).find(t=>t.id===id);
+  if(t){
+    t.done=!t.done;
+    // Done úkoly přesunout na konec
+    appData.backlog=[...appData.backlog.filter(x=>!x.done),...appData.backlog.filter(x=>x.done)];
+    saveToStorage(); render();
+  }
+}
+function addBacklogTask(){
+  const inp=document.getElementById('backlogInput'), text=inp.value.trim(); if(!text)return;
+  const pri=document.getElementById('backlogPri').value;
+  appData.backlog.unshift({id:makeid(),text,priority:pri||undefined,created:Date.now()});
+  inp.value=''; document.getElementById('backlogPri').value=''; saveToStorage(); render();
+}
+function delBacklog(id){appData.backlog=appData.backlog.filter(t=>t.id!==id);saveToStorage();render();}
+document.getElementById('backlogInput').addEventListener('keydown',e=>{if(e.key==='Enter')addBacklogTask();});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))document.querySelectorAll('.add-task-form.visible').forEach(f=>addTask(f.id.replace('form-','')));});
+function changeWeek(d){currentWeekOffset+=d;render();}
+function goToCurrentWeek(){currentWeekOffset=0;render();}
+function toggleBacklog(){const b=document.getElementById('backlogBody'),t=document.getElementById('backlogToggle');b.classList.toggle('collapsed');t.textContent=b.classList.contains('collapsed')?'▶ zobrazit':'▼ skrýt';}
+
+// ── EDIT INLINE ────────────────────────────────────────────
+function startEdit(key,id) {
+  const el=document.getElementById('tt-'+id); if(!el)return;
+  const t=(appData.days[key]||[]).find(t=>t.id===id); if(!t)return;
+  const orig=t.text;
+  el.innerHTML=`<textarea class="task-edit-input" id="edit-${id}" rows="2">${esc(orig)}</textarea>`;
+  const inp=document.getElementById('edit-'+id);
+  inp.focus(); inp.select();
+  inp.onblur=()=>saveEdit(key,id,inp.value);
+  inp.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveEdit(key,id,inp.value);}if(e.key==='Escape'){t.text=orig;render();}};
+}
+function saveEdit(key,id,val) {
+  const text=val.trim(); if(!text)return;
+  const t=(appData.days[key]||[]).find(t=>t.id===id); if(!t)return;
+  t.text=text; saveToStorage(); render();
+}
+function startBacklogEdit(id) {
+  const el=document.getElementById('btt-'+id); if(!el)return;
+  const t=(appData.backlog||[]).find(t=>t.id===id); if(!t)return;
+  const orig=t.text;
+  el.innerHTML=`<textarea class="task-edit-input" id="bedit-${id}" rows="2">${esc(orig)}</textarea>`;
+  const inp=document.getElementById('bedit-'+id);
+  inp.focus(); inp.select();
+  inp.onblur=()=>saveBacklogEdit(id,inp.value);
+  inp.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();saveBacklogEdit(id,inp.value);}if(e.key==='Escape'){t.text=orig;render();}};
+}
+function saveBacklogEdit(id,val) {
+  const text=val.trim(); if(!text)return;
+  const t=(appData.backlog||[]).find(t=>t.id===id); if(!t)return;
+  t.text=text; saveToStorage(); render();
+}
+
+// ── COPY TO DAYS ───────────────────────────────────────────
+function openCopyPopup(e, key, id) {
+  e.stopPropagation(); closeCopyPopup();
+  activeCopyTaskId=id; activeCopyKey=key;
+  const taskEl=document.getElementById('ti-'+id); if(!taskEl)return;
+  const thisWeek=getWeekDates(currentWeekOffset);
+  const nextWeek=getWeekDates(currentWeekOffset+1);
+  const popup=document.createElement('div'); popup.className='copy-popup'; popup.id='copyPopup';
+  popup.innerHTML=`<h4>Kopírovat do dne</h4>
+    <div style="font-size:9px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">Tento týden</div>
+    <div class="copy-days">
+      ${thisWeek.map((d,i)=>`<button class="copy-day-btn" data-key="${dateKey(d)}" onclick="this.classList.toggle('selected')">${DAYS_SHORT[i]} ${d.getDate()}.</button>`).join('')}
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin:6px 0 3px;text-transform:uppercase;letter-spacing:0.4px">Příští týden</div>
+    <div class="copy-days">
+      ${nextWeek.map((d,i)=>`<button class="copy-day-btn" data-key="${dateKey(d)}" onclick="this.classList.toggle('selected')">${DAYS_SHORT[i]} ${d.getDate()}.</button>`).join('')}
+    </div>
+    <button class="copy-confirm" style="margin-top:8px" onclick="confirmCopy(event)">Kopírovat</button>`;
+  popup.addEventListener('click',e=>e.stopPropagation());
+  taskEl.style.position='relative'; taskEl.appendChild(popup);
+  setTimeout(()=>document.addEventListener('click',closeCopyPopup,{once:true}),50);
+}
+function confirmCopy(e) {
+  if(e)e.stopPropagation();
+  const t=(appData.days[activeCopyKey]||[]).find(t=>t.id===activeCopyTaskId); if(!t)return;
+  document.querySelectorAll('.copy-day-btn.selected').forEach(btn=>{
+    const key=btn.dataset.key;
+    if(!appData.days[key])appData.days[key]=[];
+    appData.days[key].push({...t, id:makeid(), done:false, created:Date.now(), repeat:undefined, repeatId:undefined, repeatDays:undefined});
+  });
+  closeCopyPopup(); saveToStorage(); render();
+  showToast('Úkol zkopírován ✓');
+}
+function closeCopyPopup() {
+  const p=document.getElementById('copyPopup'); if(p)p.remove();
+  activeCopyTaskId=null; activeCopyKey=null;
+}
+
+// ── DRAG & DROP ────────────────────────────────────────────
+function onTaskDragStart(e,key,id){
+  draggedTask={type:'day',key,id};
+  e.dataTransfer.effectAllowed='move';
+  setTimeout(()=>{const el=document.getElementById('ti-'+id);if(el)el.classList.add('dragging');},0);
+}
+function onBacklogDragStart(e,id){
+  draggedTask={type:'backlog',id};
+  e.dataTransfer.effectAllowed='move';
+  setTimeout(()=>{const el=document.getElementById('bti-'+id);if(el)el.classList.add('dragging');},0);
+}
+function onDragEnd(e){
+  document.querySelectorAll('.dragging').forEach(el=>el.classList.remove('dragging'));
+  document.querySelectorAll('.drop-indicator').forEach(el=>el.classList.remove('visible'));
+  document.querySelectorAll('.backlog-drop-indicator').forEach(el=>el.classList.remove('visible'));
+  document.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
+  dropTargetId=null; backlogDropTargetId=null; vyberkaDropTargetId=null;
+}
+function onTaskDragOver(e,key,id){
+  if(!draggedTask)return;
+  e.preventDefault(); e.stopPropagation();
+  const rect=document.getElementById('ti-'+id).getBoundingClientRect();
+  const mid=rect.top+rect.height/2;
+  dropPosition=e.clientY<mid?'before':'after';
+  dropTargetId=id;
+  // Ukáže indikátor
+  const tasks=appData.days[key]||[];
+  const idx=tasks.findIndex(t=>t.id===id);
+  document.querySelectorAll(`#tl-${key} .drop-indicator`).forEach(el=>el.classList.remove('visible'));
+  const diIdx=dropPosition==='before'?idx:idx+1;
+  const di=document.getElementById(`di-${key}-${diIdx}`);
+  if(di)di.classList.add('visible');
+}
+function onTaskDragLeave(e,key,id){
+  if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest(`#ti-${id}`))return;
+}
+function onDayDrop(e,col){
+  e.preventDefault(); col.classList.remove('drag-over');
+  const targetKey=col.dataset.key; if(!draggedTask)return;
+  const task = popTask(draggedTask);
+  if (!task) return;
+  task.done = false;
+  if(!appData.days[targetKey])appData.days[targetKey]=[];
+  // Vložit na správnou pozici
+  if(dropTargetId){
+    const tIdx=appData.days[targetKey].findIndex(t=>t.id===dropTargetId);
+    if(tIdx!==-1){
+      const insertAt=dropPosition==='before'?tIdx:tIdx+1;
+      appData.days[targetKey].splice(insertAt,0,task);
+    } else { appData.days[targetKey].push(task); }
+  } else { appData.days[targetKey].push(task); }
+  dropTargetId=null; saveToStorage(); render();
+}
+function onBacklogDrop(e){
+  e.preventDefault();
+  document.getElementById('backlogBody').classList.remove('drag-over');
+  document.querySelectorAll('.backlog-drop-indicator').forEach(el=>el.classList.remove('visible'));
+  if(!draggedTask)return;
+  if(draggedTask.type==='backlog'){
+    // Přesouvání v rámci backlogu
+    if(!backlogDropTargetId){backlogDropTargetId=null;return;}
+    const bl=appData.backlog;
+    const srcIdx=bl.findIndex(t=>t.id===draggedTask.id); if(srcIdx===-1){backlogDropTargetId=null;return;}
+    const[task]=bl.splice(srcIdx,1);
+    let tIdx=bl.findIndex(t=>t.id===backlogDropTargetId);
+    if(tIdx===-1){bl.push(task);}
+    else{const ins=backlogDropPos==='before'?tIdx:tIdx+1; bl.splice(ins,0,task);}
+    backlogDropTargetId=null; draggedTask=null; saveToStorage(); render(); return;
+  }
+  // Z libovolného zdroje do backlogu
+  const task = popTask(draggedTask);
+  if (!task) return;
+  if(backlogDropTargetId){
+    const bl=appData.backlog;
+    let tIdx=bl.findIndex(t=>t.id===backlogDropTargetId);
+    const ins=backlogDropPos==='before'?tIdx:tIdx+1;
+    bl.splice(Math.max(0,ins),0,task);
+  } else { appData.backlog.unshift(task); }
+  backlogDropTargetId=null; draggedTask=null; saveToStorage(); render();
+}
+
+// ── TOAST ──────────────────────────────────────────────────
+function showToast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── CLEANUP: smazat všechny opakující se úkoly (jednorázově) ─
+function cleanupCvico() {
+  let changed = false;
+  // Projít všechny dny — odstranit úkoly s repeat nebo repeatId
+  Object.keys(appData.days).forEach(key => {
+    const before = appData.days[key].length;
+    appData.days[key] = appData.days[key].filter(t => !t.repeat && !t.repeatId);
+    if (appData.days[key].length !== before) changed = true;
+  });
+  // Projít backlog a vyběrku
+  ['backlog','vyberka','todos'].forEach(col => {
+    if (!appData[col]) return;
+    const before = appData[col].length;
+    appData[col] = appData[col].filter(t => !t.repeat && !t.repeatId);
+    if (appData[col].length !== before) changed = true;
+  });
+  if (changed) { saveToStorage(false); showToast('Opakující se aktivity odstraněny ✓'); }
+}
+
+// ── TIMELINE ───────────────────────────────────────────────
+const TL_COLOR = '#881337';
+const TL_COLORS = [
+  { color: '#dc2626', name: 'Červená' },
+  { color: '#fcd34d', name: 'Žlutá' },
+  { color: '#16a34a', name: 'Zelená' },
+  { color: '#db2777', name: 'Růžová' },
+  { color: '#64748b', name: 'Světle šedá' },
+];
+let tlResizing = null; // { id, dir:'l'|'r' }
+
+function tlWeekKey() { return dateKey(getWeekDates(currentWeekOffset)[0]); }
+function getTimeline() {
+  if (!appData.timeline) appData.timeline = {};
+  const k = tlWeekKey();
+  if (!appData.timeline[k]) appData.timeline[k] = [];
+  return appData.timeline[k];
+}
+
+// Přiřaď každému pruhu řádek tak, aby se nepřekrývaly
+function tlAssignRows(spans) {
+  const rows = [];
+  const assignment = {};
+  [...spans].sort((a,b) => a.startCol - b.startCol).forEach(s => {
+    let r = 0;
+    while (rows[r] && rows[r].some(o => s.startCol <= o.endCol && s.endCol >= o.startCol)) r++;
+    if (!rows[r]) rows[r] = [];
+    rows[r].push(s);
+    assignment[s.id] = r;
+  });
+  return { assignment, numRows: Math.max(0, rows.length) };
+}
+
+// Spočítej sloupec z X-pozice myši podle rozměrů gridu
+function tlColFromX(x) {
+  const grid = document.getElementById('tlGrid'); if (!grid) return null;
+  const rect = grid.getBoundingClientRect();
+  const gap = 9;
+  const colW = (rect.width - 6 * gap) / 7;
+  const relX = x - rect.left;
+  return Math.max(0, Math.min(6, Math.floor(relX / (colW + gap))));
+}
+
+function renderTimeline() {
+  const grid = document.getElementById('tlGrid'); if (!grid) return;
+  const spans = getTimeline();
+  if (!spans.length) { grid.style.gridTemplateRows = ''; grid.innerHTML = ''; return; }
+  const { assignment, numRows } = tlAssignRows(spans);
+  grid.style.gridTemplateRows = `repeat(${numRows}, 30px)`;
+  grid.innerHTML = spans.map(s => {
+    const row = (assignment[s.id] ?? 0) + 1;
+    return `<div class="tl-span" id="tls-${s.id}"
+      style="grid-column:${s.startCol+1}/${s.endCol+2};grid-row:${row};background:${s.color}">
+      <div class="tl-resize tl-resize-l" data-id="${s.id}" data-dir="l" title="Přetáhni začátek">◂</div>
+      <div class="tl-color-dot" data-colorid="${s.id}" style="background:${s.color}" title="Změnit barvu"></div>
+      <span class="tl-span-text" id="tlt-${s.id}">${esc(s.text || '…')}</span>
+      <button class="tl-del" data-del="${s.id}">✕</button>
+      <div class="tl-resize tl-resize-r" data-id="${s.id}" data-dir="r" title="Přetáhni konec">▸</div>
+    </div>`;
+  }).join('');
+}
+
+function tlEditSpan(id) {
+  const textEl = document.getElementById('tlt-' + id); if (!textEl) return;
+  const span = getTimeline().find(s => s.id === id); if (!span) return;
+  textEl.innerHTML = `<input class="tl-span-input" id="tlei-${id}" placeholder="Co dodávám…" value="${esc(span.text)}">`;
+  const inp = document.getElementById('tlei-' + id); if (!inp) return;
+  inp.focus(); inp.select();
+  const save = () => {
+    span.text = inp.value.trim() || span.text || '…';
+    saveToStorage(); renderTimeline();
+  };
+  inp.addEventListener('blur', save, {once:true});
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { renderTimeline(); }
+  });
+  inp.addEventListener('mousedown', e => e.stopPropagation());
+  inp.addEventListener('click', e => e.stopPropagation());
+}
+
+function tlDelSpan(id) {
+  const k = tlWeekKey();
+  if (appData.timeline[k]) appData.timeline[k] = appData.timeline[k].filter(s => s.id !== id);
+  saveToStorage(); renderTimeline();
+}
+
+function tlAddSpan() {
+  const id = makeid();
+  getTimeline().push({ id, text: '', startCol: 0, endCol: 6, color: TL_COLOR });
+  saveToStorage(false); renderTimeline();
+  setTimeout(() => tlEditSpan(id), 30);
+}
+
+function tlShowColorPicker(id, dotEl) {
+  document.querySelectorAll('.tl-color-picker').forEach(p => p.remove());
+  const span = getTimeline().find(s => s.id === id); if (!span) return;
+  const picker = document.createElement('div');
+  picker.className = 'tl-color-picker';
+  picker.innerHTML = TL_COLORS.map(c =>
+    `<div class="tl-color-swatch${span.color === c.color ? ' active' : ''}" data-color="${c.color}" style="background:${c.color}" title="${c.name}"></div>`
+  ).join('');
+  const rect = dotEl.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.top = (rect.bottom + 5) + 'px';
+  picker.style.left = Math.max(4, rect.left - 10) + 'px';
+  document.body.appendChild(picker);
+  picker.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    const sw = e.target.closest('.tl-color-swatch'); if (!sw) return;
+    span.color = sw.dataset.color;
+    saveToStorage(); renderTimeline();
+    picker.remove();
+  });
+  setTimeout(() => {
+    document.addEventListener('mousedown', function rm() {
+      picker.remove(); document.removeEventListener('mousedown', rm);
+    });
+  }, 0);
+}
+
+// Resize handles + color dot + text edit
+document.addEventListener('mousedown', e => {
+  const rh = e.target.closest('.tl-resize');
+  if (rh) {
+    e.preventDefault(); e.stopPropagation();
+    tlResizing = { id: rh.dataset.id, dir: rh.dataset.dir };
+    return;
+  }
+  const cd = e.target.closest('.tl-color-dot');
+  if (cd) {
+    e.stopPropagation();
+    tlShowColorPicker(cd.dataset.colorid, cd);
+    return;
+  }
+  const spanEl = e.target.closest('.tl-span');
+  if (spanEl && spanEl.id.startsWith('tls-') &&
+      !e.target.closest('.tl-del') &&
+      !e.target.closest('.tl-resize') &&
+      !e.target.closest('.tl-color-dot')) {
+    tlEditSpan(spanEl.id.slice(4));
+  }
+});
+
+document.addEventListener('mousemove', e => {
+  if (!tlResizing) return;
+  const col = tlColFromX(e.clientX); if (col === null) return;
+  const span = getTimeline().find(s => s.id === tlResizing.id); if (!span) return;
+  if (tlResizing.dir === 'l') {
+    const newStart = Math.min(col, span.endCol);
+    if (newStart !== span.startCol) { span.startCol = newStart; renderTimeline(); }
+  } else {
+    const newEnd = Math.max(col, span.startCol);
+    if (newEnd !== span.endCol) { span.endCol = newEnd; renderTimeline(); }
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (tlResizing) { saveToStorage(); tlResizing = null; }
+});
+
+// Delete tlačítko (delegace)
+document.addEventListener('click', e => {
+  const delBtn = e.target.closest('[data-del]');
+  if (delBtn && document.getElementById('tlGrid')?.contains(delBtn)) {
+    e.stopPropagation(); tlDelSpan(delBtn.dataset.del);
+  }
+});
+
+// Automatická záloha každých 5 minut
+setInterval(() => {
+  if (!appData) return;
+  // Jen lokální snapshot — JSONBin NEVOLAT (rate limit)
+  const snap = JSON.stringify(appData);
+  localStorage.setItem(STORAGE_KEY + '-auto-' + (Math.floor(Date.now()/300000)%3), snap);
+}, 5 * 60 * 1000);
+
+
+// ── INIT ───────────────────────────────────────────────────
+loadFromStorage();
+cleanupCvico();
+render(); // rychlý první render z localStorage
+(async () => {
+  await fsaRestoreFolder();
+  if (fsaFolderActive()) {
+    await fsaLoadFromFolder();
+    cleanupCvico(); checkAutoRollover(); render();
+    updateSyncUI('fsa-ok');
+  } else if (fsaSavedHandle) {
+    cleanupCvico(); checkAutoRollover();
+    updateSyncUI('fsa-reconnect'); // má složku, potřebuje klik
+  } else if (ghActive()) {
+    ghLoad().then(() => { cleanupCvico(); checkAutoRollover(); render(); }).catch(() => { checkAutoRollover(); render(); });
+  } else {
+    checkAutoRollover();
+    // GitHub Gist sync nastaven → nabídni nastavení; jinak FSA složka
+    updateSyncUI('gh-setup');
+  }
+})();
+</script>
+</body>
+</html>
